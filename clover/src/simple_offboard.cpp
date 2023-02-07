@@ -107,7 +107,7 @@ float nav_speed;
 bool busy = false;
 bool wait_armed = false;
 bool nav_from_sp_flag = false;
-
+string FLYING_MODE;
 enum setpoint_type_t {
 	NONE,
 	NAVIGATE,
@@ -141,7 +141,7 @@ void handleMessage(const T& msg)
 void handleState(const mavros_msgs::State& s)
 {
 	state = s;
-	if (s.mode != "OFFBOARD") {
+	if (s.mode != FLYING_MODE) {
 		// flight intercepted
 		nav_from_sp_flag = false;
 	}
@@ -280,11 +280,11 @@ void offboardAndArm()
 {
 	ros::Rate r(10);
 
-	if (state.mode != "OFFBOARD") {
+	if (state.mode != FLYING_MODE) {
 		auto start = ros::Time::now();
 		ROS_INFO("switch to OFFBOARD");
 		static mavros_msgs::SetMode sm;
-		sm.request.custom_mode = "OFFBOARD";
+		sm.request.custom_mode = FLYING_MODE;
 
 		if (!set_mode.call(sm))
 			throw std::runtime_error("Error calling set_mode service");
@@ -292,7 +292,7 @@ void offboardAndArm()
 		// wait for OFFBOARD mode
 		while (ros::ok()) {
 			ros::spinOnce();
-			if (state.mode == "OFFBOARD") {
+			if (state.mode == FLYING_MODE) {
 				break;
 			} else if (ros::Time::now() - start > offboard_timeout) {
 				string report = "OFFBOARD timed out";
@@ -767,7 +767,7 @@ publish_setpoint:
 		if (auto_arm) {
 			offboardAndArm();
 			wait_armed = false;
-		} else if (state.mode != "OFFBOARD") {
+		} else if (state.mode != FLYING_MODE) {
 			setpoint_timer.stop();
 			throw std::runtime_error("Copter is not in OFFBOARD mode, use auto_arm?");
 		} else if (!state.armed) {
@@ -822,7 +822,7 @@ bool land(std_srvs::Trigger::Request& req, std_srvs::Trigger::Response& res)
 		checkState();
 
 		if (land_only_in_offboard) {
-			if (state.mode != "OFFBOARD") {
+			if (state.mode != FLYING_MODE) {
 				throw std::runtime_error("Copter is not in OFFBOARD mode");
 			}
 		}
@@ -888,6 +888,7 @@ int main(int argc, char **argv)
 	nh_priv.param("check_kill_switch", check_kill_switch, true);
 	nh_priv.param("default_speed", default_speed, 0.5f);
 	nh_priv.param<string>("body_frame", body.child_frame_id, "body");
+	nh_priv.param<string>("flying_mode", FLYING_MODE, "OFFBOARD");
 	nh_priv.getParam("reference_frames", reference_frames);
 
 	// Default reference frames
